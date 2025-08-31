@@ -553,6 +553,7 @@ module VideoPoker
     end
 
     def refresh
+      refresh_combination_window
       @sprites["combination_window"].clear_and_draw(
         (@screen.combination_found && @highlight_combination) ? @screen.combination_found.combination : nil
       )
@@ -610,6 +611,10 @@ module VideoPoker
       ret = @screen.coins
       ret -= @screen.wager if !@screen.entry_cost_was_paid?
       return ret
+    end
+
+    def refresh_combination_window
+      @sprites["combination_window"].refresh_wager(@screen.wager)
     end
 
     def get_card_rect(card)
@@ -751,7 +756,7 @@ module VideoPoker
       return if new_wager==@screen.wager
       @screen.wager=new_wager
       refresh_coin_window
-      @sprites["combination_window"].refresh_wager(@screen.wager)
+      refresh_combination_window
       pbPlayCursorSE
     end
 
@@ -910,6 +915,7 @@ module VideoPoker
 
     def main_loop
       loop do
+        break if self.coins < @min_wager
         reset_values
         @scene.message_visible = true
         break if !select_wager
@@ -1013,10 +1019,10 @@ module VideoPoker
       @scene.flip_hand_animation(@hand, create_single_animation_parameter(cursor_index))
       case @last_don_result
       when DON_WON
-        @round_earnings=0
-      when DON_LOST
         @round_earnings*=2
         @double_or_nothing_round+=1
+      when DON_LOST
+        @round_earnings=0
       end
       @last_don_result==DON_DRAW ? @scene.show_result_as_draw : @scene.show_result(@round_earnings)
       if HIDE_MESSAGE_WHEN_SELECTING
@@ -1045,7 +1051,7 @@ module VideoPoker
         return [card_a.value,card_b.value].include?(DOUBLE_OR_NOTHING[ask_higher ? -1 : 0]) ? DON_DRAW : DON_WON
       end
       ret = DOUBLE_OR_NOTHING.index(card_a.value) <=> DOUBLE_OR_NOTHING.index(card_b.value)
-      ret*=-1 if !ask_higher
+      ret*=-1 if ask_higher
       return ret
     end
 
