@@ -34,9 +34,12 @@ module VideoPoker
   DOUBLE_OR_NOTHING_TRIES_LIMIT = 5
 
   # when true, in double or nothing asks to player if the card is higher 
-  # or lower than the face up card. If false, always treat as if he
+  # or lower than the face up card. If false, always treat as if they
   # answered "higher", making the game harder.
-  ASK_IN_DOUBLE_OR_NOTHING = false 
+  ASK_IN_DOUBLE_OR_NOTHING = false
+
+  # When true, ask if the player want to see the rules.
+  SHOW_RULES = true
 
   # When true, makes the cards go lower and hide the message window sometimes.
   # Player also need to confirm after the result. Use this mode when using big
@@ -140,6 +143,18 @@ module VideoPoker
     return ret
   end
 
+  # Card name. Displayed in the rules: Double or Nothing order.
+  def self.card_name(card_value)
+    return case card_value
+      when ACE  ; _INTL("Ace")
+      when JACK ; _INTL("Jack")
+      when QUEEN; _INTL("Queen")
+      when KING ; _INTL("King")
+      when JOKER; _INTL("Joker")
+      else card_value.to_s
+    end
+  end
+
   # Generates all combinations with points.
   # Hand is already sorted. True hand include Jokers
   def self.generate_combination_array
@@ -147,31 +162,31 @@ module VideoPoker
     ret.push(Combination.new(_INTL("Royal Flush"), 500, proc{|hand, _true_hand|
       next nil if hand.map{|card| card.suit}.uniq.size > 1
       next hand.map{|card| card.value} == [ACE, 10, JACK, QUEEN, KING] ? hand : nil
-    }))
+    }, _INTL("10, Jack, Queen, King, and Ace in the same suit.")))
     ret.push(Combination.new(_INTL("{1} of a Kind",5), 100, proc{|hand, _true_hand|
       # Doesn't use get_cards_of_value since the below line is faster
       next hand.map{|card| card.value}.uniq.size==1 ? hand : nil
-    }))
+    }, _INTL("Five of the same card.")))
     ret.push(Combination.new(_INTL("Straight Flush"), 50, proc{|hand, _true_hand|
       next nil if hand.map{|card| card.suit}.uniq.size > 1
       next process_straight(hand)
-    }))
+    }, _INTL("Cards in successive order in the same suit.")))
     ret.push(Combination.new(_INTL("{1} of a Kind",4), 20, proc{|hand, _true_hand|
       next VideoPoker.process_n_of_kind(4, hand)
-    }))
+    }, _INTL("Four of the same card.")))
     ret.push(Combination.new(_INTL("Full House"), 10, proc{|hand, _true_hand|
       # Since 4 of a kind was already checked
       next hand.map{|card| card.value}.uniq.size==2 ? hand : nil
-    }))
+    }, _INTL("Three of a kind and a pair.")))
     ret.push(Combination.new(_INTL("Flush"), 5, proc{|hand, _true_hand|
       next hand.map{|card| card.suit}.uniq.size==1 ? hand : nil
-    }))
+    }, _INTL("All cards in the same suit.")))
     ret.push(Combination.new(_INTL("Straight"), 4, proc{|hand, _true_hand|
       next process_straight(hand)
-    }))
+    }, _INTL("Cards in successive order in any suit.")))
     ret.push(Combination.new(_INTL("{1} of a Kind",3), 2, proc{|hand, _true_hand|
       next VideoPoker.process_n_of_kind(3, hand)
-    }))
+    }, _INTL("Three of the same card.")))
     ret.push(Combination.new(_INTL("2 Pairs"), 1, proc{|hand, _true_hand|
       value_array = hand.map{|card| card.value}.uniq
       # Since already checked for 3 of a kind, this was enough
@@ -182,7 +197,7 @@ module VideoPoker
         pair_array+=cards_of_value if cards_of_value.size == 2
       end
       next pair_array.size==4 ? pair_array : nil
-    }))
+    }, _INTL("Two pairs of the same cards.")))
     ret.push(Combination.new(_INTL("Joker"), 1, proc{|_hand, true_hand|
       array = nil
       for card in true_hand
@@ -191,7 +206,7 @@ module VideoPoker
         break
       end
       next array
-    }))
+    }, _INTL("Joker.")))
     return ret
   end
 
@@ -235,6 +250,28 @@ module VideoPoker
     end
   end
 
+  def self.joker_morphs_available_in_don?
+    return !DOUBLE_OR_NOTHING.include?(JOKER) && generate_deck.find{|card| card.value == JOKER} != nil
+  end
+
+  def self.don_order_string
+    return join_string_array(DOUBLE_OR_NOTHING.reverse.map{|v| card_name(v) })
+  end
+
+  # Join a string array with "." and "and" in the end.
+  def self.join_string_array(array)
+    ret = ""
+    for i in 0...array.size
+      item = array[array.size-i-1]
+      ret = case i
+        when 0; item
+        when 1; _INTL("{1} and {2}",item,ret)
+        else;   item+", "+ret
+      end
+    end
+    return ret
+  end
+
   class Card
     attr_reader :value
     attr_reader :suit
@@ -261,19 +298,21 @@ module VideoPoker
     end
     
     def ==(other)
-      return (self<=>other) == 0
+      return other && (self<=>other) == 0
     end
   end
 
   class Combination
     attr_reader :name
+    attr_reader :description
     attr_reader :bonus
     attr_reader :rule_proc # Proc who returns the cards with the combination
 
-    def initialize(name, bonus, rule_proc)
+    def initialize(name, bonus, rule_proc, description)
       @name = name
       @bonus = bonus
       @rule_proc = rule_proc
+      @description = description
     end
   end
 
@@ -442,6 +481,7 @@ module VideoPoker
 
     def start(screen, combination_array)
       @screen = screen
+      @combination_array = combination_array
       @scene_time = 0
       @sprites = {} 
       @viewport = Viewport.new(0, 0, Graphics.width, Graphics.height)
@@ -557,9 +597,9 @@ module VideoPoker
       @sprites["combination_window"].clear_and_draw(
         (@screen.combination_found && @highlight_combination) ? @screen.combination_found.combination : nil
       )
+      refresh_coin_window
       refresh_cards
       refresh_card_labels
-      refresh_coin_window
     end
 
     def refresh_cards
@@ -698,15 +738,82 @@ module VideoPoker
       flip_animation([], true, flip_array)
     end
 
-    def confirm_wager
+    def message(string, commands=nil, cmd_if_cancel=0)
+      return Bridge.message(string, commands, cmd_if_cancel){ update }
+    end
+
+    def confirm_message(string)
+      return Bridge.confirm_message(string){ update }
+    end
+
+    def confirm_view_rules
+      @sprites["message_window"].text = ""
+      return Bridge.message(_INTL("Need info about the game?"), [_INTL("No"), _INTL("Yes")], 1)==1
+    end
+    
+    def rules_loop
+      loop do
+        case select_rule_subtopic
+        when 0
+          message(_INTL("The player is dealt five cards. Then the player decides which cards to hold and which to draw.")) 
+          message(_INTL("After drawing, the player receives a payout if the hand played match one of the winning combinations."))
+        when 1
+          for combination in @combination_array.reverse
+            message(_INTL("{1}: {2}", combination.name, combination.description))
+          end
+        when 2
+          message(_INTL("After winning the hand, the player can go to Double or Nothing, betting their winnings on the chance to double their coins or lose everything."))
+          message(_INTL("The game consists of guessing whether the selected face-down card will be higher or lower than the face-up card."))
+          message(_INTL("If the chosen card is the same, it is a draw, and the player has another chance to guess."))
+        when 3
+          message(_INTL("The order in Double or Nothing, from higher to lower is:\n{1}.", VideoPoker.don_order_string))
+          if VideoPoker.joker_morphs_available_in_don?
+            message(_INTL("The {1} becomes the most advantageous card for the player.", VideoPoker.card_name(JOKER)))
+          end
+        else
+          return
+        end
+      end
+    end
+
+    def select_rule_subtopic
+      ret = message(_INTL("Which set of info?"), rules_command_array, rules_command_array.size)
+      ret+=100 if rules_command_array.size-1 <= ret # To make sure when there are less commands
+      return ret
+    end
+
+    def rules_command_array
+      ret  = [_INTL("How to Play"), _INTL("Winning Combinations")]
+      ret += [_INTL("Double or Nothing"),_INTL("Double or Nothing Order")] if @screen.double_or_nothing_enabled?
+      ret.push(_INTL("Back"))
+      return ret
+    end
+
+    def ask_wager
       refresh
       @sprites["message_window"].text = ""
-      ret = Bridge.confirm_message(_INTL("The minimum wanger is {1}. Do you want to play?", @screen.min_wager)){
-        update
-      }
+      if SHOW_RULES
+        ret = select_play_rules_back
+      else
+        ret = confirm_message(_INTL("The minimum wanger is {1}. Do you want to play?", @screen.min_wager))
+      end
       wait(0.2) # To avoid SE overlapping
       ret ? pbSEPlay(Bridge.audio_name("Slots coin")) : pbPlayCancelSE
       return ret
+    end
+
+    def select_play_rules_back
+      case message(_INTL("The minimum wanger is {1}. Do you want to play?", @screen.min_wager), [
+        _INTL("Play"), _INTL("Game Info"), _INTL("Exit")
+      ])
+        when 0
+          return true
+        when 1
+          rules_loop
+          return select_play_rules_back
+        when 2
+          return false
+      end
     end
 
     # Return if selected successfully
@@ -736,16 +843,17 @@ module VideoPoker
 
     def confirm_double_or_nothing(number, current_earnings)
       @sprites["message_window"].text = ""
-      return Bridge.confirm_message(
-        _INTL("If you win, you will get {1} coins. Will you try double or nothing round {2}?", current_earnings*2, number)
-      ){ update }
+      return confirm_message(_INTL(
+        "If you win, you will get {1} coins. Will you try Double or Nothing round {2}?",
+        current_earnings*2, number
+      ))
     end
 
     def ask_higher
       @sprites["message_window"].text = ""
-      return Bridge.message(
+      return message(
         _INTL("Try to guess if this card will be higher or lower."), [_INTL("Higher"),_INTL("Lower")]
-      ){ update } == 0
+      ) == 0
     end
 
     def on_press_in_select_wager(gain)
@@ -904,11 +1012,18 @@ module VideoPoker
       return @double_or_nothing_round > 0
     end
 
+    # If min and max are equals, makes player confirm wager instead of 
+    # selecting.
+    def can_select_wager?
+      return @min_wager != @max_wager
+    end
+
     def play(min_wager, max_wager)
       @min_wager = min_wager
       @max_wager = max_wager
       reset_values
       @scene.start(self, @combination_array)
+      @scene.rules_loop if SHOW_RULES && can_select_wager? && @scene.confirm_view_rules
       main_loop
       @scene.finish
     end
@@ -931,10 +1046,8 @@ module VideoPoker
       end
     end
 
-    # Select wager, or confirm if min and max are equals.
-    # Returns false if canceled.
     def select_wager
-      return @min_wager==@max_wager ? @scene.confirm_wager : @scene.select_wager_loop
+      return can_select_wager? ? @scene.select_wager_loop : @scene.ask_wager
     end
 
     def initialize_hand
@@ -989,7 +1102,7 @@ module VideoPoker
 
     def double_or_nothing_loop
       @double_or_nothing_round = 1
-      while can_play_double_or_nothing?
+      while can_currently_play_double_or_nothing?
         if DON_DRAW != @last_don_result && !@scene.confirm_double_or_nothing(@double_or_nothing_round, @round_earnings)
           break
         end
@@ -997,7 +1110,7 @@ module VideoPoker
       end
     end
 
-    # Select double or nothing card. Returns the cursor index.
+    # Select Double or Nothing card. Returns the cursor index.
     def select_double_or_nothing_card
       if HIDE_MESSAGE_WHEN_SELECTING && !ASK_IN_DOUBLE_OR_NOTHING
         @scene.message_visible = true
@@ -1033,13 +1146,17 @@ module VideoPoker
       @scene.flip_back_hand_animation
     end
 
-    def can_play_double_or_nothing?
+    def can_currently_play_double_or_nothing?
       return (
         @round_earnings > 0 &&
         @round_earnings*2 <= DOUBLE_OR_NOTHING_COIN_LIMIT && 
         @double_or_nothing_round <= DOUBLE_OR_NOTHING_TRIES_LIMIT &&
         Bridge.max_coins > Bridge.coins+@round_earnings
       )
+    end
+
+    def double_or_nothing_enabled?
+      return (@min_wager*2 <= DOUBLE_OR_NOTHING_COIN_LIMIT) && (DOUBLE_OR_NOTHING_TRIES_LIMIT > 0)
     end
 
     # Compare sequence in bigger or nothing.
@@ -1129,9 +1246,9 @@ module VideoPoker
       return value.to_s_formatted
     end
 
-    def message(string, commands=nil, &block)
-      return Kernel.pbMessage(string, commands, &block) if MAJOR_VERSION < 20
-      return pbMessage(string, commands, &block)
+    def message(string, commands=nil, cmd_if_cancel=0, &block)
+      return Kernel.pbMessage(string, commands, cmd_if_cancel, &block) if MAJOR_VERSION < 20
+      return pbMessage(string, commands, cmd_if_cancel, &block)
     end
 
     def confirm_message(string, &block)
