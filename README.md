@@ -5,6 +5,9 @@ This plugin is for Pokémon Essentials. It's a Video Poker minigame, specificall
 ![](Screens/gif.gif)
 ![](Screens/screen.png)
 ![](Screens/screen2.png)
+![](Screens/screen3.png)
+![](Screens/screen4.png)
+![](Screens/screen5.png)
 
 ## Installation
 Follow FL's [Essentials plugin installation instructions](https://github.com/FL-/Misc/tree/main/Guides/EssentialsInstallPlugin). For Essentials version 18.1 or lower, put the script above main. You can find more resources in [Extra Resurces folder](/Extra%20Resources).
