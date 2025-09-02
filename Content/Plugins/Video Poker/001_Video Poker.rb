@@ -250,8 +250,12 @@ module VideoPoker
     end
   end
 
+  def self.joker_available?
+    return generate_deck.find{|card| card.value == JOKER} != nil
+  end
+
   def self.joker_morphs_available_in_don?
-    return !DOUBLE_OR_NOTHING.include?(JOKER) && generate_deck.find{|card| card.value == JOKER} != nil
+    return !DOUBLE_OR_NOTHING.include?(JOKER) && joker_available?
   end
 
   def self.don_order_string
@@ -757,6 +761,9 @@ module VideoPoker
         when 0
           message(_INTL("The player is dealt five cards. Then the player decides which cards to hold and which to draw.")) 
           message(_INTL("After drawing, the player receives a payout if the hand played match one of the winning combinations."))
+          if VideoPoker.joker_available?
+            message(_INTL("The {1} becomes the most advantageous card for the player.", VideoPoker.card_name(JOKER)))
+          end
         when 1
           for combination in @combination_array.reverse
             message(_INTL("{1}: {2}", combination.name, combination.description))
