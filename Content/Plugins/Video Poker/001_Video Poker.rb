@@ -33,7 +33,7 @@ module VideoPoker
   # zero to disable it.
   DOUBLE_OR_NOTHING_TRIES_LIMIT = 5
 
-  # when true, in double or nothing asks to player if the card is higher 
+  # When true, in double or nothing asks to player if the card is higher 
   # or lower than the face up card. If false, always treat as if they
   # answered "higher", making the game harder.
   ASK_IN_DOUBLE_OR_NOTHING = false
@@ -837,10 +837,6 @@ module VideoPoker
           pbPlayCancelSE
           return false
         end
-        # Uncommend above code to Input::A also confirm cards
-        # if Input.trigger?(Input::A)
-        #  break
-        # end
         on_press_in_select_wager(-1 ) if Input.repeat?(Input::DOWN)
         on_press_in_select_wager( 1 ) if Input.repeat?(Input::UP)
         on_press_in_select_wager(-10) if Input.repeat?(Input::LEFT)
@@ -962,7 +958,7 @@ module VideoPoker
     def finish
       @cursor.visible = false
       pbFadeOutAndHide(@sprites) { update }
-      pbDisposeMessageWindow(@sprites["message_window"])
+      Bridge.dispose_message_window(@sprites["message_window"])
       pbDisposeSpriteHash(@sprites)
       @cursor.dispose
       @card_source.dispose
@@ -1275,6 +1271,11 @@ module VideoPoker
     def create_message_window(viewport)
       return Kernel.pbCreateMessageWindow(viewport) if MAJOR_VERSION < 20
       return pbCreateMessageWindow(viewport)
+    end
+
+    def dispose_message_window(window)
+      return Kernel.pbDisposeMessageWindow(window) if MAJOR_VERSION < 20
+      return pbDisposeMessageWindow(window)
     end
 
     def sel_arrow_white_path
